@@ -311,17 +311,22 @@ async def get_status():
         or state.current_profile
         or (running_task.get("profile") if running_task and not global_owner else None)
     )
+    # Kept for the model echo below: a row already fetched here is reused rather
+    # than queried twice, and a row that was never needed simply has no override.
+    profile_sess_row: dict[str, Any] | None = None
     if not active_profile and (running_sid or latest_session_id):
         check_sid = running_sid or latest_session_id
         sess_row = session_repo.get_session_by_id(check_sid)
         if sess_row:
+            profile_sess_row = sess_row
             llm_traces = session_repo.get_llm_traces_for_profile(check_sid)
             agent_names = session_repo.get_agent_trace_names(check_sid)
             active_profile = model_service.resolve_session_profile(
                 sess_row, llm_traces, agent_names=agent_names
             )
 
-    model_info = model_service.get_active_model_info(active_profile)
+    llm_model, llm_provider = model_service.resolve_session_llm_override(profile_sess_row or {})
+    model_info = model_service.get_active_model_info(active_profile, llm_model, llm_provider)
 
     # Unified Global Queue: merge web tasks and external SDK/CLI device queue tickets
     global_queued = DeviceExecutionLock.get_queued_tasks()

@@ -1145,6 +1145,15 @@ class Agent:
         run_tuning = run_tuning_summary(self._config, task.request.profile)
         if run_tuning:
             device_data["run_tuning"] = run_tuning
+        # Echo the per-task LLM override so the console can report which model
+        # this run really used. device_info is a schemaless JSON dict, so there
+        # is nothing to migrate: rows written before the override existed simply
+        # lack these keys and fall back to the configured nodes. A provider can
+        # never appear without a model (the builder rejects that combination).
+        if task.request.llm_model:
+            device_data["llm_model"] = str(task.request.llm_model).strip()
+        if task.request.llm_provider:
+            device_data["llm_provider"] = str(task.request.llm_provider).strip().lower()
 
         target_sid = (
             self._session_id

@@ -565,6 +565,8 @@ async def test_status_reports_external_global_owner_without_ipc_connection():
     ):
         repo.get_latest_session.return_value = None
         repo.get_session_by_id.return_value = None
+        # No session row was needed, so the model echo stays unset.
+        models.resolve_session_llm_override.return_value = (None, None)
         models.get_active_model_info.return_value = None
         result = await get_status()
 

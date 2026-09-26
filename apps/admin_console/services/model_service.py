@@ -55,10 +55,30 @@ class ModelService:
         return provider, model_id
 
     @classmethod
-    def get_active_model_info(cls, profile: str | None = None) -> dict[str, str]:
-        """Return active architecture and underlying LLM model configuration."""
+    def get_active_model_info(
+        cls,
+        profile: str | None = None,
+        llm_model: str | None = None,
+        llm_provider: str | None = None,
+    ) -> dict[str, str]:
+        """Return active architecture and underlying LLM model configuration.
+
+        Args:
+            profile: Resolved architecture ('flash' / 'pro') or None for Flash.
+            llm_model: Per-task model override recorded for the session. It wins
+                the ``id`` so the reported model is the one that actually ran.
+            llm_provider: Provider of that override. Only replaces the
+                configured provider when the task pinned it; without it each
+                node keeps its own provider.
+        """
         # 1. Determine underlying LLM model and provider from config (cached)
         provider, model_id = cls._get_llm_provider_and_model()
+
+        # 1b. A recorded per-task override outranks the configured defaults.
+        if llm_model:
+            model_id = str(llm_model)
+        if llm_provider:
+            provider = str(llm_provider)
 
         # 2. Determine agent architecture name (Flash vs Pro)
         arch_name = "Flash"
@@ -77,6 +97,31 @@ class ModelService:
             "provider": provider,
             "architecture": f"ARTEMIS {arch_name}",
         }
+
+    @staticmethod
+    def resolve_session_llm_override(row_dict: dict[str, Any]) -> tuple[str | None, str | None]:
+        """Read the per-task LLM override a session recorded in its device_info.
+
+        Reads the same schemaless JSON ``resolve_session_profile`` parses. Rows
+        written before the override existed carry neither key, which is reported
+        as "no override" so the caller falls back to the configured model.
+        """
+        d_info_raw = row_dict.get("device_info")
+        if not d_info_raw:
+            return (None, None)
+        try:
+            d_info = json.loads(d_info_raw) if isinstance(d_info_raw, str) else d_info_raw
+        except (ValueError, TypeError):
+            # Malformed device_info JSON: treat the run as un-overridden.
+            return (None, None)
+        if not isinstance(d_info, dict):
+            return (None, None)
+        model = d_info.get("llm_model")
+        provider = d_info.get("llm_provider")
+        return (
+            str(model).strip() or None if isinstance(model, str) else None,
+            str(provider).strip().lower() or None if isinstance(provider, str) else None,
+        )
 
     @staticmethod
     def resolve_session_profile(

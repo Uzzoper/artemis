@@ -22,10 +22,14 @@ from types import SimpleNamespace
 
 import pytest
 
+import artemis.sdk.agent as agent_module
 from artemis.config.llm import LLM, LLMConfig, LLMConfigUtils, LLMWithFallback
 from artemis.llm.router import ModelProvider
-from artemis.services.llm import _resolve_endpoint
+from artemis.sdk.agent import Agent
 from artemis.sdk.builders.task_request_builder import TaskRequestBuilder
+from artemis.sdk.types.agent import AgentConfig, ServerConfig
+from artemis.sdk.types.task import AgentProfile, TaskRequestCommon
+from artemis.services.llm import _resolve_endpoint
 
 
 def _node(provider: str = "google", model: str = "gemini-3.8-flash", **extra):
@@ -178,3 +182,68 @@ def test_builder_blank_override_leaves_request_unset():
 
     assert request.llm_model is None
     assert request.llm_provider is None
+
+
+def _agent_config() -> AgentConfig:
+    profile = AgentProfile(name="default", llm_config=_real_llm_config())
+    return AgentConfig(
+        agent_profiles={"default": profile},
+        task_request_defaults=TaskRequestCommon(goal="Audit checkout"),
+        default_profile=profile,
+        servers=ServerConfig(adb_host="127.0.0.1", adb_port=5037),
+    )
+
+
+def _device_data_for(tmp_path, monkeypatch, request) -> dict:
+    """Run the real ``_prepare_tracing`` and return the device_info it stored.
+
+    Only the DataEngine sink is stubbed: it would otherwise create a session in
+    the local database. The device_info assembly itself is the real code.
+    """
+    recorded: dict = {}
+
+    class RecordingDataEngine:
+        def __init__(self, ctx):
+            recorded["ctx"] = ctx
+
+        def start_session(self, goal, device_info=None, session_id=None):
+            recorded["goal"] = goal
+            recorded["device_info"] = device_info
+
+    monkeypatch.setattr(agent_module, "DataEngine", RecordingDataEngine)
+    agent = SimpleNamespace(_tmp_traces_dir=tmp_path, _config=_agent_config(), _session_id=None)
+    task = SimpleNamespace(request=request, get_name=lambda: "task-1")
+    context = SimpleNamespace(device=None, execution_setup=None, data_engine=None)
+
+    Agent._prepare_tracing(agent, task, context)
+
+    return recorded["device_info"]
+
+
+def test_device_data_records_the_llm_override(tmp_path, monkeypatch):
+    """The server producer: the override lands in the schemaless device_info."""
+    request = (
+        TaskRequestBuilder(goal="Audit checkout")
+        .using_profile("pro")
+        .with_llm_override(model="  gpt-5.1  ", provider=" OpenAI ")
+        .build()
+    )
+
+    device_data = _device_data_for(tmp_path, monkeypatch, request)
+
+    assert device_data["llm_model"] == "gpt-5.1"
+    assert device_data["llm_provider"] == "openai"
+    # Alongside the pre-existing echoes, which the console reads the same way.
+    assert device_data["profile"] == "pro"
+    assert device_data["run_tuning"]
+
+
+def test_device_data_omits_the_llm_keys_without_an_override(tmp_path, monkeypatch):
+    """Legacy behaviour: no override means no keys, so old and new rows agree."""
+    request = TaskRequestBuilder(goal="Open Settings").using_profile("flash").build()
+
+    device_data = _device_data_for(tmp_path, monkeypatch, request)
+
+    assert "llm_model" not in device_data
+    assert "llm_provider" not in device_data
+    assert device_data["profile"] == "flash"
