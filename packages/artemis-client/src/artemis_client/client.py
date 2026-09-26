@@ -81,8 +81,6 @@ class ArtemisClient:
         device_id: str | None = None,
         device_serial: str | None = None,
         default_profile: Literal["flash", "pro"] = "flash",
-        default_llm_model: str | None = None,
-        default_llm_provider: str | None = None,
         concurrency_mode: str = "per_device",
         max_concurrency: int | None = None,
         standalone: bool = False,
@@ -99,8 +97,6 @@ class ArtemisClient:
         self.poll_interval = float(poll_interval)
         self._device_serial = device_serial or device_id
         self.default_profile = default_profile
-        self.default_llm_model = default_llm_model
-        self.default_llm_provider = default_llm_provider
         self.concurrency_mode = str(concurrency_mode).strip().lower()
         self.max_concurrency = max_concurrency
         self.standalone = standalone
@@ -204,9 +200,9 @@ class ArtemisClient:
         perception depth) are Pro-only tuning knobs; the Flash profile ignores
         them. ``llm_model`` / ``llm_provider`` are the per-task LLM override:
         the host pins this task's models instead of its configured ones, with
-        no restart and no config change. Both fall back to the client defaults
-        (``default_llm_model`` / ``default_llm_provider``). Experimental,
-        forward-compatible fields belong in ``options``.
+        no restart and no config change. Both are per-call (blank falls back to
+        "not requested") and the override also pins the fallback model.
+        Experimental, forward-compatible fields belong in ``options``.
         """
         normalized_goal = goal.strip()
         if not normalized_goal:
@@ -224,10 +220,11 @@ class ArtemisClient:
                 raise ValueError("task_id must be a valid UUID string") from exc
         resolved_profile = profile or self.default_profile
         resolved_device = device_serial or self.device_serial
-        # Per-task override: the call wins over the client default, and a blank
-        # value falls back to the default rather than overriding with "".
-        resolved_model = (llm_model or "").strip() or self.default_llm_model
-        resolved_provider = (llm_provider or "").strip() or self.default_llm_provider
+        # Per-task override: a blank value means "not requested" rather than an
+        # override with "", and the provider is normalised to the API's
+        # lower-case spelling.
+        resolved_model = (llm_model or "").strip() or None
+        resolved_provider = (llm_provider or "").strip().lower() or None
         payload: dict[str, Any] = {
             "goal": normalized_goal,
             "profile": resolved_profile,

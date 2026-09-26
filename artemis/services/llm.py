@@ -1037,7 +1037,15 @@ def _resolve_endpoint(
     is_utils: bool = False,
     use_fallback: bool = False,
 ) -> ModelEndpoint:
-    """Cleanly resolves a ModelEndpoint from context llm_config."""
+    """Cleanly resolves a ModelEndpoint from context llm_config.
+
+    Precedence is the per-task override (``ctx.llm_model`` / ``ctx.llm_provider``)
+    over the ``artemis.jsonc`` node config over the built-in defaults. The
+    override is applied *after* the ``use_fallback`` unwrap on purpose: it pins
+    the fallback model as well, so a task that asked for a model never silently
+    drops to a different one mid-run. The config object itself is only read, so
+    other tasks sharing it keep their configured models.
+    """
     if getattr(ctx, "llm_config", None) is None:
         try:
             ctx.llm_config = get_default_llm_config()

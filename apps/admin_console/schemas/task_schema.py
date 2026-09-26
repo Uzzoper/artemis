@@ -14,7 +14,7 @@
 
 from typing import Any, get_args
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from artemis.config.constants import LLMProvider
 
@@ -67,6 +67,19 @@ class RunRequest(BaseModel):
                 + ", ".join(SUPPORTED_LLM_PROVIDERS)
             )
         return normalized
+
+    @model_validator(mode="after")
+    def _provider_requires_model(self) -> "RunRequest":
+        """Reject a provider without a model (FastAPI answers 422).
+
+        A provider only says where to send the model, so accepting it alone
+        would enqueue a task that dies mid-run on a broken endpoint.
+        """
+        if self.llm_provider and not self.llm_model:
+            raise ValueError(
+                "llm_provider requires llm_model: pass llm_model too, or drop llm_provider."
+            )
+        return self
 
 
 class ReplayRequest(BaseModel):

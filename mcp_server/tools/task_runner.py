@@ -214,10 +214,13 @@ def _normalize_llm_override(
 
     ``llm_model`` is a raw provider model identifier, so only surrounding
     whitespace is removed; the provider is checked against the supported set so
-    an unusable override is rejected before any trace is created.
+    an unusable override is rejected before any trace is created. A provider
+    without a model is rejected too: it pins nothing and would otherwise fail
+    mid-task on a broken endpoint.
 
     Raises:
-        ValueError: with a caller-facing message when the provider is unknown.
+        ValueError: with a caller-facing message when the provider is unknown, or
+            when a provider is given without a model.
     """
     model: str | None = None
     if llm_model is not None and str(llm_model).strip():
@@ -231,6 +234,11 @@ def _normalize_llm_override(
                 f"Invalid llm_provider {llm_provider!r}. Must be one of: "
                 + ", ".join(SUPPORTED_LLM_PROVIDERS)
             )
+    if provider and not model:
+        raise ValueError(
+            f"llm_provider={llm_provider!r} requires llm_model: pass llm_model too, "
+            "or drop llm_provider."
+        )
     return model, provider
 
 
@@ -315,13 +323,16 @@ def mobile_run_task(
         llm_model: Optional. Per-task LLM model override applied to every
           model this task resolves (e.g. `"gemini-3.8-flash"`), overriding the
           `artemis.jsonc` node configuration for this run only — no restart and
-          no config edit. Leave unset to keep the configured models. Note this
-          is *not* the `model` profile argument above: that one selects the
-          Flash/Pro execution architecture, this one selects the LLM itself.
+          no config edit. It intentionally pins the resolved fallback model as
+          well, so the whole task runs on the override. Leave unset to keep the
+          configured models. Note this is *not* the `model` profile argument
+          above: that one selects the Flash/Pro execution architecture, this one
+          selects the LLM itself, and the two combine freely.
         llm_provider: Optional. Provider for `llm_model` (`"google"`,
           `"openai"`, `"anthropic"`, `"openrouter"`, `"xai"`, `"vertexai"`,
           `"ollama"`, `"vllm"`, `"custom"`). When omitted, each node keeps its
-          configured provider.
+          configured provider. Requires `llm_model`; an unknown provider or a
+          provider without a model is rejected before the task starts.
     """
     # 0. Validate and normalize model
     if model.lower() not in ("flash", "pro"):

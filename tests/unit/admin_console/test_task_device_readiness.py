@@ -283,3 +283,26 @@ def test_run_request_rejects_unknown_llm_provider():
     """An unusable provider is rejected at the API boundary, not mid-task."""
     with pytest.raises(ValidationError):
         RunRequest(goal="Open Settings", llm_provider="acme-cloud")
+
+
+def test_run_request_rejects_provider_without_model():
+    """A provider alone would pin nothing, so FastAPI answers 422."""
+    with pytest.raises(ValidationError, match="llm_provider requires llm_model"):
+        RunRequest(goal="Open Settings", llm_provider="openai")
+
+
+def test_run_request_accepts_blank_provider_with_model():
+    """Blank keeps the blank -> None semantics, so no 422 and no override."""
+    request = RunRequest(goal="Open Settings", llm_model="gpt-5.1", llm_provider="   ")
+
+    assert request.llm_model == "gpt-5.1"
+    assert request.llm_provider is None
+
+
+def test_run_request_accepts_flash_profile_with_override():
+    """The Flash execution profile and the LLM override are independent knobs."""
+    request = RunRequest(goal="Open Settings", profile="flash", llm_model="gemini-3.8-pro")
+
+    assert request.profile == "flash"
+    assert request.llm_model == "gemini-3.8-pro"
+    assert request.llm_provider is None

@@ -18,13 +18,14 @@
 """Builder for TaskRequest objects using a fluent interface."""
 
 from pathlib import Path
-from typing import Generic, TypeVar, cast
+from typing import Generic, TypeVar, cast, get_args
 
 try:
     from typing import Self
 except ImportError:
     from typing import Self
 
+from artemis.config.constants import LLMProvider
 from artemis.constants import RECURSION_LIMIT
 from artemis.sdk.types.agent import AgentProfile
 from artemis.sdk.types.task import TaskRequest, TaskRequestCommon
@@ -32,6 +33,12 @@ from pydantic import BaseModel
 
 TIn = TypeVar("TIn", bound=BaseModel | None)
 TOut = TypeVar("TOut", bound=BaseModel)
+
+#: Providers accepted by ``with_llm_override``. Mirrors the API-side check in
+#: ``apps/admin_console/schemas/task_schema.py`` and the MCP-side one in
+#: ``mcp_server/tools/task_runner.py``, so a bad provider fails at build time
+#: on every entry point instead of mid-task.
+SUPPORTED_LLM_PROVIDERS: tuple[str, ...] = get_args(LLMProvider)
 
 
 class _CyFunctionDetectorMeta(type):
@@ -202,16 +209,32 @@ class TaskRequestBuilder(TaskRequestCommonBuilder, Generic[TIn]):
         The override wins over the ``artemis.jsonc`` node configuration for
         every model this task resolves, so a single run can use a different
         model or provider without a restart. Omitted/blank values keep the
-        configured value.
+        configured value. The override also pins the resolved fallback model.
 
         Args:
             model: Model identifier override (e.g. ``gemini-3.8-flash``)
             provider: Provider override (e.g. ``openai``, ``anthropic``)
+
+        Raises:
+            ValueError: If ``provider`` is set without ``model``, or names an
+                unknown provider. Both are caught here instead of failing
+                mid-task with a broken endpoint.
         """
         self._llm_model = model.strip() or None if isinstance(model, str) else model
         self._llm_provider = (
             provider.strip().lower() or None if isinstance(provider, str) else provider
         )
+        if self._llm_provider and not self._llm_model:
+            raise ValueError(
+                "with_llm_override: provider requires model (got"
+                f" provider={self._llm_provider!r}). A provider only says where to"
+                " send the model, so pass model=... too, or drop provider=..."
+            )
+        if self._llm_provider and self._llm_provider not in SUPPORTED_LLM_PROVIDERS:
+            raise ValueError(
+                f"with_llm_override got an unknown provider {self._llm_provider!r}."
+                " Supported providers: " + ", ".join(SUPPORTED_LLM_PROVIDERS)
+            )
         return self
 
     def with_name(self, name: str) -> "TaskRequestBuilder[TIn]":

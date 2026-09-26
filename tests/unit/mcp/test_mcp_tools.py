@@ -326,6 +326,33 @@ def test_mobile_run_task_rejects_unknown_llm_provider_before_creating_a_trace(te
     assert os.listdir(temp_trace_env) == []
 
 
+def test_mobile_run_task_rejects_llm_provider_without_model(temp_trace_env):
+    with pytest.raises(ValueError, match="requires llm_model"):
+        mobile_run_task(task_desc="Open Settings", model="Pro", llm_provider="openai")
+    assert os.listdir(temp_trace_env) == []
+
+
+def test_mobile_run_task_combines_flash_profile_with_llm_override(temp_trace_env):
+    """The default Flash profile and the LLM override travel together."""
+    process = MagicMock(pid=781)
+    with (
+        patch("mcp_server.tools.task_runner.DeviceExecutionLock.reserve", return_value="t"),
+        patch("mcp_server.tools.task_runner.DeviceExecutionLock.transfer_reservation"),
+        patch("mcp_server.tools.task_runner.subprocess.Popen", return_value=process) as popen,
+    ):
+        mobile_run_task(
+            task_desc="Open Settings",
+            model="Flash",
+            llm_model="gemini-3.8-pro",
+            llm_provider="openai",
+        )
+
+    cmd = popen.call_args.args[0]
+    assert cmd[cmd.index("--model") + 1] == "Flash"
+    assert cmd[cmd.index("--llm-model") + 1] == "gemini-3.8-pro"
+    assert cmd[cmd.index("--llm-provider") + 1] == "openai"
+
+
 def test_mobile_run_task_forwards_llm_override_to_daemon(temp_trace_env, monkeypatch):
     monkeypatch.delenv("ARTEMIS_STANDALONE", raising=False)
     with (

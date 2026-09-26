@@ -104,6 +104,8 @@ async def run_task(request: RunRequest):
             task_payload.setdefault("session_id", requested_sid)
             task_payload.setdefault("goal", incoming_goals[0])
             task_payload.setdefault("profile", request.profile or "flash")
+            # setdefault, not assignment: an idempotent retry replays the first
+            # override, so a task already queued/active keeps the LLM it started with.
             task_payload.setdefault("llm_model", request.llm_model)
             task_payload.setdefault("llm_provider", request.llm_provider)
             task_payload.setdefault("device_serial", request.device_serial)

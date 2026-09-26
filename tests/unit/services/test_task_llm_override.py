@@ -20,6 +20,9 @@ and the override lives on the per-task context, so nothing global is mutated.
 
 from types import SimpleNamespace
 
+import pytest
+
+from artemis.config.llm import LLM, LLMConfig, LLMConfigUtils, LLMWithFallback
 from artemis.llm.router import ModelProvider
 from artemis.services.llm import _resolve_endpoint
 from artemis.sdk.builders.task_request_builder import TaskRequestBuilder
@@ -38,6 +41,31 @@ def _ctx(node, llm_model=None, llm_provider=None):
         ),
         llm_model=llm_model,
         llm_provider=llm_provider,
+    )
+
+
+def _real_llm_config() -> LLMConfig:
+    """A real LLMConfig (not a stub) whose operator node is gemini-3.8-flash."""
+    node = LLMWithFallback(
+        provider="google",
+        model="gemini-3.8-flash",
+        temperature=0.0,
+        fallback=LLM(provider="google", model="gemini-3.7-flash", temperature=0.0),
+    )
+    return LLMConfig(
+        planner=node,
+        utils=LLMConfigUtils(outputter=node, hopper=node),
+        summarizer=node,
+        operator=node,
+        operator_summarizer=node,
+        log_reader_sub_agent=node,
+        log_analyzer=node,
+        diagnoser=node,
+        checker=node,
+        planner_avatar=node,
+        history_analyzer_expert=node,
+        diagnoser_expert=node,
+        explorer=node,
     )
 
 
@@ -85,6 +113,53 @@ def test_override_also_applies_to_resolved_fallback():
 
     assert endpoint.provider == ModelProvider.OPENAI
     assert endpoint.model_name == "gpt-5.1"
+
+
+def test_override_does_not_mutate_the_shared_llm_config():
+    """The override is per task: the shared LLMConfig is only read."""
+    config = _real_llm_config()
+
+    def ctx(**override):
+        return SimpleNamespace(llm_config=config, **override)
+
+    endpoint = _resolve_endpoint(
+        ctx(llm_model="gpt-5.1", llm_provider="openai"),
+        "operator",
+    )
+
+    assert (endpoint.provider, endpoint.model_name) == (ModelProvider.OPENAI, "gpt-5.1")
+    # The node this task overrode is untouched, fallback included.
+    assert (config.operator.provider, config.operator.model) == ("google", "gemini-3.8-flash")
+    assert (config.operator.fallback.provider, config.operator.fallback.model) == (
+        "google",
+        "gemini-3.7-flash",
+    )
+    # Another node and a later task without an override still see the original.
+    assert _resolve_endpoint(ctx(), "checker").model_name == "gemini-3.8-flash"
+    # A second task may pin a different model on another node at the same time.
+    other = _resolve_endpoint(ctx(llm_model="claude-x", llm_provider="anthropic"), "explorer")
+    assert (other.provider, other.model_name) == (ModelProvider.ANTHROPIC, "claude-x")
+    assert config.operator is config.checker
+
+
+def test_builder_rejects_provider_without_model():
+    """A provider alone pins nothing, so it is refused at build time."""
+    with pytest.raises(ValueError, match="provider requires model"):
+        TaskRequestBuilder(goal="Audit checkout").with_llm_override(provider="openai")
+
+
+def test_builder_rejects_blank_model_with_provider():
+    builder = TaskRequestBuilder(goal="Audit checkout")
+
+    with pytest.raises(ValueError, match="provider requires model"):
+        builder.with_llm_override(model="   ", provider="openai")
+
+
+def test_builder_rejects_unknown_provider():
+    with pytest.raises(ValueError, match="unknown provider"):
+        TaskRequestBuilder(goal="Audit checkout").with_llm_override(
+            model="gpt-5.1", provider="NotAProvider"
+        )
 
 
 def test_builder_carries_override_on_the_task_request():
