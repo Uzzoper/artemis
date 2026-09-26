@@ -917,15 +917,26 @@ export class AgentStreamComponent implements AfterViewInit {
   }
 
   /**
-   * Model shown on a task card: the per-task override recorded on the queue item
-   * when there is one, otherwise the model persisted with the session, in the
-   * "provider · model" form. Null when neither is known.
+   * Model shown on a task card, in the "provider · model" form: the per-task
+   * override recorded on the queue item when there is one, otherwise the model
+   * persisted with the session, otherwise the globally active model. A queued
+   * task without an override has no session row yet and resolves the configured
+   * default when the worker dispatches it, which is what activeModel reports, so
+   * the badge shows the model the task will run with. Null when none is known.
    */
   public getTaskModelLabel(session: Session): string | null {
     const model = (session.llm_model || '').trim() || (session.model_info?.id || '').trim();
     const provider = (session.llm_provider || '').trim() || (session.model_info?.provider || '').trim();
     if (!model && !provider) {
-      return null;
+      const active = this.agentService.activeModel();
+      const activeId = (active?.id || '').trim();
+      const activeProvider = (active?.provider || '').trim();
+      if (!activeId && !activeProvider) {
+        return null;
+      }
+      return activeId && activeProvider
+        ? `${activeProvider} · ${activeId}`
+        : activeId || activeProvider;
     }
     if (model && provider) {
       return `${provider} · ${model}`;
