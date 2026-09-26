@@ -57,8 +57,9 @@ export class WorkspaceComponent implements OnInit {
   public isSubmitting = signal<boolean>(false);
   public errorMessage = signal<string | null>(null);
   public selectedProfile = signal<'flash' | 'pro'>('flash');
-  // Optional per-task LLM override, persisted like the profile. An empty field
-  // is left out of the /api/run payload, so the server default applies.
+  // Optional per-task LLM override, in-memory only and never restored:
+  // every task starts from the server default unless set here. An empty
+  // field is left out of the /api/run payload, so the server default applies.
   public providerOverride = signal<string>('');
   public modelOverride = signal<string>('');
   public hasLlmOverride = computed(() => !!this.providerOverride() || !!this.modelOverride());
@@ -75,8 +76,11 @@ export class WorkspaceComponent implements OnInit {
       if (saved === 'flash' || saved === 'pro') {
         this.selectedProfile.set(saved);
       }
-      this.providerOverride.set(localStorage.getItem('artemis_provider_override') || '');
-      this.modelOverride.set(localStorage.getItem('artemis_model_override') || '');
+      // The LLM override is intentionally not restored: it applies to a
+      // single task only. Drop keys written by earlier versions so a stale
+      // value can never leak into a future task.
+      localStorage.removeItem('artemis_provider_override');
+      localStorage.removeItem('artemis_model_override');
     }
 
     // The global ⌘K/Ctrl+K shortcut is registered outside the Angular zone so
@@ -107,14 +111,14 @@ export class WorkspaceComponent implements OnInit {
    * Set the optional LLM provider for the next task. Blank clears the override.
    */
   public setProviderOverride(provider: string): void {
-    this.setOverride(provider, this.providerOverride, 'artemis_provider_override');
+    this.providerOverride.set((provider || '').trim());
   }
 
   /**
    * Set the optional LLM model for the next task. Blank clears the override.
    */
   public setModelOverride(model: string): void {
-    this.setOverride(model, this.modelOverride, 'artemis_model_override');
+    this.modelOverride.set((model || '').trim());
   }
 
   /**
@@ -126,25 +130,6 @@ export class WorkspaceComponent implements OnInit {
     }
     this.setProviderOverride('');
     this.setModelOverride('');
-  }
-
-  /**
-   * Store one trimmed override value; a blank value removes the stored one.
-   */
-  private setOverride(
-    value: string,
-    target: WritableSignal<string>,
-    storageKey: string
-  ): void {
-    const next = (value || '').trim();
-    target.set(next);
-    if (typeof localStorage !== 'undefined') {
-      if (next) {
-        localStorage.setItem(storageKey, next);
-      } else {
-        localStorage.removeItem(storageKey);
-      }
-    }
   }
 
   /**
