@@ -216,6 +216,8 @@ import {
 
 import { drawActionCoordinatesOnOverlay } from '../../utils/image-overlay.util';
 
+import { getTaskModelLabel as resolveTaskModelLabel, TaskModelLabel } from '../../utils/task-model-label.util';
+
 import {
   consolidateLogsToBlocks,
   isBackendSwitchNote,
@@ -924,24 +926,8 @@ export class AgentStreamComponent implements AfterViewInit {
    * default when the worker dispatches it, which is what activeModel reports, so
    * the badge shows the model the task will run with. Null when none is known.
    */
-  public getTaskModelLabel(session: Session): string | null {
-    const model = (session.llm_model || '').trim() || (session.model_info?.id || '').trim();
-    const provider = (session.llm_provider || '').trim() || (session.model_info?.provider || '').trim();
-    if (!model && !provider) {
-      const active = this.agentService.activeModel();
-      const activeId = (active?.id || '').trim();
-      const activeProvider = (active?.provider || '').trim();
-      if (!activeId && !activeProvider) {
-        return null;
-      }
-      return activeId && activeProvider
-        ? `${activeProvider} · ${activeId}`
-        : activeId || activeProvider;
-    }
-    if (model && provider) {
-      return `${provider} · ${model}`;
-    }
-    return model || provider;
+  public getTaskModelLabel(session: Session): TaskModelLabel | null {
+    return resolveTaskModelLabel(session, this.agentService.activeModel());
   }
 
   public selectTask(sessionId: string, event?: Event): void {

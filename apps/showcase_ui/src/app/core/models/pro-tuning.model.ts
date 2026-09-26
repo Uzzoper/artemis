@@ -146,6 +146,30 @@ export interface ProTuningDefaults {
   explorer_mode?: string | null;
 }
 
+/** One named model choice offered by the backend for the per-task override. */
+export interface LlmPreset {
+  name: string;
+  provider: string;
+  model: string;
+}
+
+/** The model the server uses when a task requests no override. */
+export interface LlmDefault {
+  provider: string;
+  model: string;
+}
+
+/**
+ * `GET /api/llm-options`: the providers and named presets the launcher can
+ * offer, plus the configured default. Every field is optional so a partial or
+ * older backend still renders the override fields.
+ */
+export interface LlmOptionsResponse {
+  providers?: string[];
+  presets?: LlmPreset[];
+  default?: LlmDefault | null;
+}
+
 export const DEFAULT_VERIFICATION_LEVEL: VerificationLevelId = 'final';
 export const DEFAULT_EXPLORER_MODE: ExplorerModeId = 'flash';
 

@@ -16,10 +16,10 @@
 
 import { Injectable, signal, inject, computed, DestroyRef, NgZone } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, catchError, of } from 'rxjs';
 
 import { Session, ModelInfo, TaskQueueItem, AgentStatusResponse, SessionUsage } from '../core/models/session.model';
-import { ProTuningDefaults, ProTuningOptions } from '../core/models/pro-tuning.model';
+import { LlmOptionsResponse, ProTuningDefaults, ProTuningOptions } from '../core/models/pro-tuning.model';
 import { StepItemData, StepReplayFrame, LLMStreamResetEventData, StreamResetNotice, DEFAULT_STREAM_RESET_MESSAGE, PersistedCheckerStream, StreamSegment } from '../core/models/stream.model';
 import { extractStepReplayFrames } from '../utils/action-formatter.util';
 import { persistedStreamToSegments } from '../utils/stream-aggregator.util';
@@ -408,6 +408,18 @@ export class AgentService {
    */
   public getProTuningDefaults(): Observable<ProTuningDefaults> {
     return this.http.get<ProTuningDefaults>('/api/run/defaults');
+  }
+
+  /**
+   * Providers, presets and the configured default reported by
+   * `GET /api/llm-options`, for the launcher's per-task override picker.
+   * Resolves to null when the endpoint is unavailable, which leaves the
+   * override as free-text fields.
+   */
+  public getLlmOptions(): Observable<LlmOptionsResponse | null> {
+    return this.http.get<LlmOptionsResponse>('/api/llm-options').pipe(
+      catchError(() => of(null))
+    );
   }
 
   /** Session-wide token totals, live executor context size and the run's tuning. */
