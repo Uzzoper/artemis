@@ -916,6 +916,19 @@ export class AgentStreamComponent implements AfterViewInit {
     return resolved;
   }
 
+  /**
+   * Per-task LLM override carried by the queue item, e.g. "openai · gpt-5-mini".
+   * Null when the task runs on the configured default model.
+   */
+  public getTaskModelLabel(session: Session): string | null {
+    const model = (session.llm_model || '').trim();
+    const provider = (session.llm_provider || '').trim();
+    if (!model) {
+      return provider || null;
+    }
+    return provider ? `${provider} · ${model}` : model;
+  }
+
   public selectTask(sessionId: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.agentService.selectSession(sessionId, true);

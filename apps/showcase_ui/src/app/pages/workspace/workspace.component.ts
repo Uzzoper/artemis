@@ -283,6 +283,9 @@ export class WorkspaceComponent implements OnInit {
       .subscribe({
         next: (res) => {
           this.taskInput = '';
+          // The override applies to this task only: a successful submit resets
+          // both fields so the next task falls back to the server defaults.
+          this.clearLlmOverride();
           if (this.dockInputRef?.nativeElement) {
             this.dockInputRef.nativeElement.style.height = 'auto';
           }

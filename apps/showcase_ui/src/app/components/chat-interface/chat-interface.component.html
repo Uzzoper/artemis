@@ -80,6 +80,12 @@ limitations under the License.
               {{ getTaskStatus(session) | uppercase }}
             </span>
             <div class="task-card-header-actions">
+              @if (getTaskModelLabel(session); as modelLabel) {
+                <span class="task-model" [title]="'Model: ' + modelLabel">
+                  <span class="material-symbols-outlined model-icon">memory</span>
+                  <span class="model-name">{{ modelLabel }}</span>
+                </span>
+              }
               @if (getDeviceSerial(session)) {
                 <span class="task-device" [title]="'Device: ' + getDeviceSerial(session)">
                   <span class="material-symbols-outlined device-icon">phone_android</span>

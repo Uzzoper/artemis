@@ -120,7 +120,10 @@ export class AgentService {
         ...s,
         status: sStatus,
         device_serial: serial,
-        model_info: isCurrentActive && this.activeModel() ? this.activeModel()! : s.model_info
+        // The stored model_info already reflects a per-task LLM override, so it
+        // wins; the global active model is only a fallback for rows that carry
+        // no model_info at all.
+        model_info: s.model_info ?? (isCurrentActive && this.activeModel() ? this.activeModel()! : s.model_info)
       };
       sessionMap.set(s.session_id, finalSession);
       if (isTerminal) {
@@ -1552,7 +1555,9 @@ export class AgentService {
                   initial_goal: item.goal || '',
                   start_time: item.start_time || item.created_at || (Date.now() / 1000 + index),
                   status: item.status || 'pending',
-                  device_serial: item.device_serial || item.device_id || null
+                  device_serial: item.device_serial || item.device_id || null,
+                  llm_model: item.llm_model || null,
+                  llm_provider: item.llm_provider || null
                 };
               }
               return {
