@@ -15,8 +15,8 @@
 """One normalisation/validation pass for the per-task LLM override.
 
 Every entry point that can carry an override (the Console API schema, the SDK
-builder, the MCP tool, the MCP background worker, the queue service and the
-``artemis run`` daemon client) funnels the pair through
+builder, the MCP tool, the MCP background worker and the queue service)
+funnels the pair through
 :func:`normalize_llm_override` so one typo is reported the same way everywhere,
 before any trace or task exists.
 

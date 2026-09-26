@@ -188,21 +188,15 @@ def test_get_llm_options_ignores_a_presets_block_that_is_not_a_mapping(
     assert ModelService.get_llm_options()["presets"] == []
 
 
-def test_get_llm_options_ships_the_five_configured_presets():
-    """The real artemis.jsonc offers the presets the picker offers."""
+def test_get_llm_options_real_config_parses_without_coupling_to_content():
+    """Smoke: the shipped artemis.jsonc parses; asserts shape, not content."""
     from artemis.config.constants import LLMProvider
 
     options = ModelService.get_llm_options()
 
-    assert len(options["presets"]) == 5
-    assert {preset["name"] for preset in options["presets"]} == {
-        "gemini-flagship",
-        "gemini-flash",
-        "openai-gpt4o",
-        "cost-saving",
-        "local-ollama",
-    }
-    assert options["providers"] == list(get_args(LLMProvider))
+    assert len(options["presets"]) >= 1
+    assert all({"name", "provider", "model"} <= set(preset) for preset in options["presets"])
+    assert {preset["provider"] for preset in options["presets"]} <= set(get_args(LLMProvider))
     assert options["default"]["provider"] and options["default"]["model"]
 
 

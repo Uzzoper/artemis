@@ -65,8 +65,12 @@ def _normalize_llm_override(
 
     Mirrors ``artemis.config.llm_override.normalize_llm_override``, which cannot
     be imported because this package must stay runtime-dependency-free.
+    Non-string input is stringified like the canonical helper so the mirror
+    is exact; unsupported providers are *not* rejected here.
     """
-    return (llm_model or "").strip() or None, (llm_provider or "").strip().lower() or None
+    model = str(llm_model).strip() or None if llm_model is not None else None
+    provider = str(llm_provider).strip().lower() or None if llm_provider is not None else None
+    return model, provider
 
 
 class ArtemisClient:
