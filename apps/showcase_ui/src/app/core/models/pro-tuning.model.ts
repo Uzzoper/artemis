@@ -134,6 +134,10 @@ export const EXPLORER_MODES: readonly TuningLevel<ExplorerModeId>[] = [
 export interface ProTuningOptions {
   verificationLevel?: VerificationLevelId | string;
   explorerMode?: ExplorerModeId | string;
+  /** LLM provider override for this run, sent as `llm_provider`. Unset means the server default. */
+  provider?: string;
+  /** LLM model override for this run, sent as `llm_model`. Unset means the server default. */
+  model?: string;
 }
 
 /** Effective defaults reported by `GET /api/run/defaults`. */

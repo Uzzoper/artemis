@@ -442,6 +442,12 @@ export class AgentService {
       if (proTuning?.explorerMode) {
         payload.explorer_mode = proTuning.explorerMode;
       }
+      if (proTuning?.provider) {
+        payload.llm_provider = proTuning.provider;
+      }
+      if (proTuning?.model) {
+        payload.llm_model = proTuning.model;
+      }
       this.clearUserPinnedSession();
       this.http.post<any>('/api/run', payload).subscribe({
         next: (res) => {

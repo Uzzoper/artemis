@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import { Component, ChangeDetectionStrategy, NgZone, DestroyRef, inject, computed, signal, ViewChild, ElementRef, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, NgZone, DestroyRef, inject, computed, signal, ViewChild, ElementRef, OnInit, type WritableSignal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { AgentStreamComponent } from '../../components/agent-stream/agent-stream.component';
 import { ChatInterfaceComponent } from '../../components/chat-interface/chat-interface.component';
 import { FloatingVideoPlayerComponent } from '../../components/floating-video-player/floating-video-player.component';
 import { AgentService } from '../../services/agent.service';
+import type { ProTuningOptions } from '../../core/models/pro-tuning.model';
 
 @Component({
   selector: 'app-workspace',
@@ -56,6 +57,11 @@ export class WorkspaceComponent implements OnInit {
   public isSubmitting = signal<boolean>(false);
   public errorMessage = signal<string | null>(null);
   public selectedProfile = signal<'flash' | 'pro'>('flash');
+  // Optional per-task LLM override, persisted like the profile. An empty field
+  // is left out of the /api/run payload, so the server default applies.
+  public providerOverride = signal<string>('');
+  public modelOverride = signal<string>('');
+  public hasLlmOverride = computed(() => !!this.providerOverride() || !!this.modelOverride());
 
   // Expand States (Signals for 0-latency reactivity)
   public isHoveringCard = signal<boolean>(false);
@@ -69,6 +75,8 @@ export class WorkspaceComponent implements OnInit {
       if (saved === 'flash' || saved === 'pro') {
         this.selectedProfile.set(saved);
       }
+      this.providerOverride.set(localStorage.getItem('artemis_provider_override') || '');
+      this.modelOverride.set(localStorage.getItem('artemis_model_override') || '');
     }
 
     // The global ⌘K/Ctrl+K shortcut is registered outside the Angular zone so
@@ -92,6 +100,50 @@ export class WorkspaceComponent implements OnInit {
     this.selectedProfile.set(profile);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('artemis_selected_profile', profile);
+    }
+  }
+
+  /**
+   * Set the optional LLM provider for the next task. Blank clears the override.
+   */
+  public setProviderOverride(provider: string): void {
+    this.setOverride(provider, this.providerOverride, 'artemis_provider_override');
+  }
+
+  /**
+   * Set the optional LLM model for the next task. Blank clears the override.
+   */
+  public setModelOverride(model: string): void {
+    this.setOverride(model, this.modelOverride, 'artemis_model_override');
+  }
+
+  /**
+   * Drop both override fields so the next task runs on the server defaults.
+   */
+  public clearLlmOverride(event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.setProviderOverride('');
+    this.setModelOverride('');
+  }
+
+  /**
+   * Store one trimmed override value; a blank value removes the stored one.
+   */
+  private setOverride(
+    value: string,
+    target: WritableSignal<string>,
+    storageKey: string
+  ): void {
+    const next = (value || '').trim();
+    target.set(next);
+    if (typeof localStorage !== 'undefined') {
+      if (next) {
+        localStorage.setItem(storageKey, next);
+      } else {
+        localStorage.removeItem(storageKey);
+      }
     }
   }
 
@@ -154,8 +206,12 @@ export class WorkspaceComponent implements OnInit {
    */
   public onCardClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
-    // Don't steal focus if clicking action buttons or textarea directly
-    if (target.closest('button') || target.tagName.toLowerCase() === 'textarea') {
+    // Don't steal focus if clicking action buttons, the LLM override fields
+    // or the textarea directly
+    if (
+      target.closest('button, input, select') ||
+      target.tagName.toLowerCase() === 'textarea'
+    ) {
       return;
     }
     this.focusInput();
@@ -232,24 +288,31 @@ export class WorkspaceComponent implements OnInit {
     }
     this.isInputFocused.set(false);
 
-    this.agentService.runTask(goal, this.selectedProfile()).subscribe({
-      next: (res) => {
-        this.taskInput = '';
-        if (this.dockInputRef?.nativeElement) {
-          this.dockInputRef.nativeElement.style.height = 'auto';
+    const llmOverride: ProTuningOptions = {
+      provider: this.providerOverride() || undefined,
+      model: this.modelOverride() || undefined
+    };
+
+    this.agentService
+      .runTask(goal, this.selectedProfile(), undefined, undefined, llmOverride)
+      .subscribe({
+        next: (res) => {
+          this.taskInput = '';
+          if (this.dockInputRef?.nativeElement) {
+            this.dockInputRef.nativeElement.style.height = 'auto';
+          }
+          this.isSubmitting.set(false);
+          this.agentService.fetchStatus();
+        },
+        error: (err) => {
+          console.error('Failed to submit task:', err);
+          this.isSubmitting.set(false);
+          this.errorMessage.set(err.error?.detail || 'The runner is busy. Please wait for current task to finish.');
+          setTimeout(() => {
+            this.errorMessage.set(null);
+          }, 5000);
         }
-        this.isSubmitting.set(false);
-        this.agentService.fetchStatus();
-      },
-      error: (err) => {
-        console.error('Failed to submit task:', err);
-        this.isSubmitting.set(false);
-        this.errorMessage.set(err.error?.detail || 'The runner is busy. Please wait for current task to finish.');
-        setTimeout(() => {
-          this.errorMessage.set(null);
-        }, 5000);
-      }
-    });
+      });
   }
 
   /**

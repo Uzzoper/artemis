@@ -292,6 +292,8 @@ async def test_queue_worker_cmd_construction():
             app_path="/path/to/app.apk",
             verification_level=" Checkpoints ",
             explorer_mode="ULTRA",
+            llm_model=" gemini-3.8-pro ",
+            llm_provider="OpenAI",
         )
 
         for _ in range(30):
@@ -314,8 +316,14 @@ async def test_queue_worker_cmd_construction():
         # to the worker as the CLI's existing spelling.
         assert cmd[cmd.index("--verification-level") + 1] == "checkpoints"
         assert cmd[cmd.index("--explorer-pro-mode") + 1] == "ultra"
+        # The per-task LLM override reaches the worker as --model/--provider;
+        # the model keeps its spelling, the provider is lower-cased.
+        assert cmd[cmd.index("--model") + 1] == "gemini-3.8-pro"
+        assert cmd[cmd.index("--provider") + 1] == "openai"
         assert enqueue_result["tasks"][0]["verification_level"] == "checkpoints"
         assert enqueue_result["tasks"][0]["explorer_mode"] == "ultra"
+        assert enqueue_result["tasks"][0]["llm_model"] == "gemini-3.8-pro"
+        assert enqueue_result["tasks"][0]["llm_provider"] == "openai"
         assert (
             executed_kwargs[0]["env"]["ARTEMIS_DEVICE_QUEUE_TICKET"]
             == (enqueue_result["tasks"][0]["queue_ticket"])
@@ -763,6 +771,36 @@ async def test_enqueue_tasks_unified_ingress():
         assert task["ingress"] == "mcp"
         assert task["conversation_id"] == "conv-456"
         assert task["goal"] == "Test unified goal"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_tasks_normalises_llm_override_and_omits_when_blank():
+    """A blank LLM override means 'not requested' and is persisted as None."""
+    with (
+        patch.object(TaskQueueService, "ensure_worker_running"),
+        patch(
+            "apps.admin_console.services.task_queue_service.DeviceExecutionLock.reserve",
+            return_value="mock-ticket-llm",
+        ),
+    ):
+        res = await task_queue_service.enqueue_tasks(
+            ["Goal with model override"],
+            profile="pro",
+            llm_model="  gpt-5.1  ",
+            llm_provider="  OpenAI ",
+        )
+        blank = await task_queue_service.enqueue_tasks(
+            ["Goal without override"],
+            profile="pro",
+            llm_model="   ",
+            llm_provider="",
+        )
+
+    task, blank_task = res["tasks"][0], blank["tasks"][0]
+    assert task["llm_model"] == "gpt-5.1"
+    assert task["llm_provider"] == "openai"
+    assert blank_task["llm_model"] is None
+    assert blank_task["llm_provider"] is None
 
 
 @pytest.mark.asyncio

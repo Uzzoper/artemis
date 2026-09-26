@@ -169,6 +169,8 @@ class TaskRequestBuilder(TaskRequestCommonBuilder, Generic[TIn]):
         self._name: str | None = None
         self._output_description = None
         self._output_format: type[TIn] | None = None
+        self._llm_model: str | None = None
+        self._llm_provider: str | None = None
 
     @classmethod
     def from_common(cls, goal: str, common: TaskRequestCommon):
@@ -188,6 +190,28 @@ class TaskRequestBuilder(TaskRequestCommonBuilder, Generic[TIn]):
             profile: The agent profile to use
         """
         self._profile = profile
+        return self
+
+    def with_llm_override(
+        self,
+        model: str | None = None,
+        provider: str | None = None,
+    ) -> "TaskRequestBuilder[TIn]":
+        """Pin the LLM of this task only, without changing global config.
+
+        The override wins over the ``artemis.jsonc`` node configuration for
+        every model this task resolves, so a single run can use a different
+        model or provider without a restart. Omitted/blank values keep the
+        configured value.
+
+        Args:
+            model: Model identifier override (e.g. ``gemini-3.8-flash``)
+            provider: Provider override (e.g. ``openai``, ``anthropic``)
+        """
+        self._llm_model = model.strip() or None if isinstance(model, str) else model
+        self._llm_provider = (
+            provider.strip().lower() or None if isinstance(provider, str) else provider
+        )
         return self
 
     def with_name(self, name: str) -> "TaskRequestBuilder[TIn]":
@@ -255,5 +279,7 @@ class TaskRequestBuilder(TaskRequestCommonBuilder, Generic[TIn]):
             llm_output_path=self._llm_output_path,
             locked_app_package=self._locked_app_package,
             app_path=self._app_path,
+            llm_model=self._llm_model,
+            llm_provider=self._llm_provider,
         )
         return task_request

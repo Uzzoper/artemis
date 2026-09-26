@@ -89,6 +89,7 @@ class TaskResult:
     status: str
     goal: str | None = None
     profile: str | None = None
+    llm_model: str | None = None
     device_serial: str | None = None
     output: Any = None
     error: str | None = None
@@ -141,6 +142,7 @@ class TaskResult:
             status=(_string(payload.get("status")) or "unknown").lower(),
             goal=_string(payload.get("goal") or payload.get("initial_goal")),
             profile=_string(payload.get("profile")),
+            llm_model=_string(payload.get("llm_model")),
             device_serial=_device_from_payload(payload),
             output=output,
             error=_string(payload.get("error") or payload.get("error_message")),

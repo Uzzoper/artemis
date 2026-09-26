@@ -121,6 +121,8 @@ async def run_task(
     device_serial: str | None = None,
     verification_level: str | None = None,
     explorer_pro_mode: str | None = None,
+    llm_model: str | None = None,
+    llm_provider: str | None = None,
 ):
     """Executes the mobile automation agent task and logs all actions/results.
 
@@ -128,6 +130,11 @@ async def run_task(
     ``explorer_pro_mode`` ('flash' | 'pro' | 'ultra') are Pro-profile tuning
     knobs mirroring ``artemis run --verification-level / --explorer-pro-mode``;
     the Flash profile ignores them.
+
+    ``llm_model`` / ``llm_provider`` are the per-task LLM override mirroring
+    ``artemis run --model / --provider``: they pin every model this task
+    resolves without touching ``artemis.jsonc``. Note ``model`` (the Flash/Pro
+    profile) is a different argument.
     """
     trace_dir = trace_store.get_trace_dir(trace_id)
     os.makedirs(trace_dir, exist_ok=True)
@@ -258,6 +265,12 @@ async def run_task(
             task_builder.with_output_description(description=expected_output_desc)
         if model.lower() == "flash":
             task_builder.using_profile("flash")
+        llm_model = llm_model.strip() or None if isinstance(llm_model, str) else llm_model
+        llm_provider = (
+            llm_provider.strip().lower() or None if isinstance(llm_provider, str) else llm_provider
+        )
+        if llm_model or llm_provider:
+            task_builder.with_llm_override(model=llm_model, provider=llm_provider)
 
         result = await agent.run_task(request=task_builder.build())
         print(f"Task completed. Result: {result}")
@@ -434,6 +447,17 @@ if __name__ == "__main__":
         "--explorer-pro-mode",
         help="Pro-profile Explorer perception version: 'flash', 'pro' or 'ultra'",
     )
+    parser.add_argument(
+        "--llm-model",
+        help=(
+            "Per-task LLM model override applied to every model of this run"
+            " (distinct from --model, which selects the Flash/Pro profile)"
+        ),
+    )
+    parser.add_argument(
+        "--llm-provider",
+        help="Provider for --llm-model ('google', 'openai', 'anthropic', ...)",
+    )
 
     args = parser.parse_args()
 
@@ -449,5 +473,7 @@ if __name__ == "__main__":
             device_serial=args.device_serial,
             verification_level=args.verification_level,
             explorer_pro_mode=args.explorer_pro_mode,
+            llm_model=args.llm_model,
+            llm_provider=args.llm_provider,
         )
     )

@@ -167,6 +167,26 @@ limitations under the License.
                   </button>
                 </div>
               </div>
+
+              <!-- Optional Per-Task LLM Override (empty field = server default) -->
+              <div class="llm-override-group">
+                <input type="text" class="llm-override-input" placeholder="Provider (optional)"
+                  aria-label="Provider (optional)" title="Provider (optional). Leave empty to use the server default."
+                  [ngModel]="providerOverride()" (ngModelChange)="setProviderOverride($event)"
+                  (focus)="onInputFocus()" (blur)="onInputBlur()" [disabled]="isSubmitting()"
+                  spellcheck="false" autocomplete="off" maxlength="64" />
+                <input type="text" class="llm-override-input" placeholder="Model (optional)"
+                  aria-label="Model (optional)" title="Model (optional). Leave empty to use the server default."
+                  [ngModel]="modelOverride()" (ngModelChange)="setModelOverride($event)"
+                  (focus)="onInputFocus()" (blur)="onInputBlur()" [disabled]="isSubmitting()"
+                  spellcheck="false" autocomplete="off" maxlength="128" />
+                @if (hasLlmOverride()) {
+                  <button type="button" class="llm-override-clear" (click)="clearLlmOverride($event)"
+                    title="Clear provider and model override" aria-label="Clear provider and model override">
+                    <span class="material-symbols-outlined">close</span>
+                  </button>
+                }
+              </div>
             </div>
           </div>
         </div>

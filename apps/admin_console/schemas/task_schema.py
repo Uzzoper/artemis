@@ -12,7 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pydantic import BaseModel
+from typing import Any, get_args
+
+from pydantic import BaseModel, field_validator
+
+from artemis.config.constants import LLMProvider
+
+# Providers accepted by the per-task override. Single source of truth: the same
+# literal types the LLM config validates against.
+SUPPORTED_LLM_PROVIDERS: tuple[str, ...] = get_args(LLMProvider)
 
 
 class RunRequest(BaseModel):
@@ -26,12 +34,39 @@ class RunRequest(BaseModel):
     # version used by the Operator ('flash' | 'pro' | 'ultra').
     verification_level: str | None = None
     explorer_mode: str | None = None
+    # Per-task LLM override: pins every model of this one task to `llm_model`
+    # (optionally on `llm_provider`) without touching artemis.jsonc or any
+    # global state. Omitted/blank means "use the configured nodes".
+    llm_model: str | None = None
+    llm_provider: str | None = None
     locked_app_package: str | None = None
     app_path: str | None = None
     device_serial: str | None = None
     ingress: str | None = "frontend"
     session_id: str | None = None
     conversation_id: str | None = None
+
+    @field_validator("llm_model", "llm_provider", mode="before")
+    @classmethod
+    def _blank_override_is_unset(cls, value: Any) -> Any:
+        """Treat a blank/whitespace override as 'not requested'."""
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @field_validator("llm_provider")
+    @classmethod
+    def _known_provider(cls, value: str | None) -> str | None:
+        """Reject an unknown provider up front instead of failing mid-task."""
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized not in SUPPORTED_LLM_PROVIDERS:
+            raise ValueError(
+                f"Unknown llm_provider {value!r}. Supported providers: "
+                + ", ".join(SUPPORTED_LLM_PROVIDERS)
+            )
+        return normalized
 
 
 class ReplayRequest(BaseModel):

@@ -562,6 +562,8 @@ class Agent:
             adb_client=self._adb_client,
             ui_adb_client=self._ui_adb_client,
             llm_config=agent_profile.llm_config,
+            llm_model=getattr(request, "llm_model", None),
+            llm_provider=getattr(request, "llm_provider", None),
             agent_config=self._config,
         )
 

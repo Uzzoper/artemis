@@ -81,6 +81,8 @@ class ArtemisClient:
         device_id: str | None = None,
         device_serial: str | None = None,
         default_profile: Literal["flash", "pro"] = "flash",
+        default_llm_model: str | None = None,
+        default_llm_provider: str | None = None,
         concurrency_mode: str = "per_device",
         max_concurrency: int | None = None,
         standalone: bool = False,
@@ -97,6 +99,8 @@ class ArtemisClient:
         self.poll_interval = float(poll_interval)
         self._device_serial = device_serial or device_id
         self.default_profile = default_profile
+        self.default_llm_model = default_llm_model
+        self.default_llm_provider = default_llm_provider
         self.concurrency_mode = str(concurrency_mode).strip().lower()
         self.max_concurrency = max_concurrency
         self.standalone = standalone
@@ -186,6 +190,8 @@ class ArtemisClient:
         task_id: str | None = None,
         verification_level: VerificationLevel | None = None,
         explorer_mode: ExplorerMode | None = None,
+        llm_model: str | None = None,
+        llm_provider: str | None = None,
         options: Mapping[str, Any] | None = None,
     ) -> TaskHandle:
         """Submit one task and return immediately after scheduler admission.
@@ -196,7 +202,11 @@ class ArtemisClient:
         ``strict``: how much the Checker audits a Pro run) and
         ``explorer_mode`` (``flash`` | ``pro`` | ``ultra``: the Pro Operator's
         perception depth) are Pro-only tuning knobs; the Flash profile ignores
-        them. Experimental, forward-compatible fields belong in ``options``.
+        them. ``llm_model`` / ``llm_provider`` are the per-task LLM override:
+        the host pins this task's models instead of its configured ones, with
+        no restart and no config change. Both fall back to the client defaults
+        (``default_llm_model`` / ``default_llm_provider``). Experimental,
+        forward-compatible fields belong in ``options``.
         """
         normalized_goal = goal.strip()
         if not normalized_goal:
@@ -214,6 +224,10 @@ class ArtemisClient:
                 raise ValueError("task_id must be a valid UUID string") from exc
         resolved_profile = profile or self.default_profile
         resolved_device = device_serial or self.device_serial
+        # Per-task override: the call wins over the client default, and a blank
+        # value falls back to the default rather than overriding with "".
+        resolved_model = (llm_model or "").strip() or self.default_llm_model
+        resolved_provider = (llm_provider or "").strip() or self.default_llm_provider
         payload: dict[str, Any] = {
             "goal": normalized_goal,
             "profile": resolved_profile,
@@ -229,6 +243,8 @@ class ArtemisClient:
             "conversation_id": conversation_id,
             "verification_level": resolved_level,
             "explorer_mode": resolved_mode,
+            "llm_model": resolved_model,
+            "llm_provider": resolved_provider,
             "options": dict(options) if options is not None else None,
         }
         payload.update({key: value for key, value in optional_values.items() if value is not None})
@@ -306,6 +322,8 @@ class ArtemisClient:
         task_id: str | None = None,
         verification_level: VerificationLevel | None = None,
         explorer_mode: ExplorerMode | None = None,
+        llm_model: str | None = None,
+        llm_provider: str | None = None,
         options: Mapping[str, Any] | None = None,
         timeout: float = 1800.0,
         poll_interval: float | None = None,
@@ -323,6 +341,8 @@ class ArtemisClient:
             task_id=task_id,
             verification_level=verification_level,
             explorer_mode=explorer_mode,
+            llm_model=llm_model,
+            llm_provider=llm_provider,
             options=options,
         )
         return await self.wait_for_task(
@@ -341,6 +361,8 @@ class ArtemisClient:
             "device_serial": getattr(task, "device_serial", None)
             or getattr(task, "device_id", None),
             "locked_app_package": getattr(task, "locked_package", None),
+            "llm_model": getattr(task, "llm_model", None),
+            "llm_provider": getattr(task, "llm_provider", None),
         }
         values.update(overrides)
         return await self.run(goal, **values)

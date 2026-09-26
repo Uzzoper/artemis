@@ -104,6 +104,8 @@ async def run_task(request: RunRequest):
             task_payload.setdefault("session_id", requested_sid)
             task_payload.setdefault("goal", incoming_goals[0])
             task_payload.setdefault("profile", request.profile or "flash")
+            task_payload.setdefault("llm_model", request.llm_model)
+            task_payload.setdefault("llm_provider", request.llm_provider)
             task_payload.setdefault("device_serial", request.device_serial)
             task_payload.setdefault("status", "running" if is_active else "queued")
             return {
@@ -172,6 +174,8 @@ async def run_task(request: RunRequest):
         enable_outputter=request.enable_outputter,
         verification_level=request.verification_level,
         explorer_mode=request.explorer_mode,
+        llm_model=request.llm_model,
+        llm_provider=request.llm_provider,
         locked_app_package=request.locked_app_package,
         app_path=request.app_path,
         device_serial=target_serial,

@@ -1061,8 +1061,15 @@ def _resolve_endpoint(
         val = getattr(obj, attr, None)
         return val if isinstance(val, expected_type) else None
 
-    provider_val = getattr(cfg, "provider", "google")
-    model_val = getattr(cfg, "model", "gemini-2.5-flash")
+    # Precedence: per-task override > artemis.jsonc node config > built-in
+    # default. The override lives on the per-task context (see sdk/agent.py), so
+    # a task can pin a different model/provider without mutating the shared
+    # LLMConfig or restarting the host.
+    override_provider = _get_val(ctx, "llm_provider", str)
+    override_model = _get_val(ctx, "llm_model", str)
+
+    provider_val = (override_provider or "").strip() or getattr(cfg, "provider", "google")
+    model_val = (override_model or "").strip() or getattr(cfg, "model", "gemini-2.5-flash")
 
     return ModelEndpoint(
         provider=ModelProvider.from_string(provider_val),
