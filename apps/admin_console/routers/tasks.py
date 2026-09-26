@@ -374,7 +374,19 @@ async def get_status():
         conn_info = state.active_connections[str(latest_session_id)]
         is_paused = state.is_paused
         conn_profile = conn_info.get("profile") or active_profile
-        conn_model_info = model_service.get_active_model_info(conn_profile)
+        # This branch reports the connection's own session, so reuse the row read
+        # above only when it describes that same session; otherwise read it here.
+        # Just the one indexed lookup - the trace-name profile lookups stay on the
+        # main path, so this branch stays cheap.
+        conn_row = sess_row_for_model
+        if not conn_row or str(conn_row.get("session_id") or "") != str(latest_session_id):
+            conn_row = session_repo.get_session_by_id(latest_session_id)
+        conn_llm_model, conn_llm_provider = model_service.resolve_session_llm_override(
+            conn_row or {}
+        )
+        conn_model_info = model_service.get_active_model_info(
+            conn_profile, conn_llm_model, conn_llm_provider
+        )
         return {
             "status": "paused" if is_paused else "running",
             "paused_error": state.paused_error if is_paused else None,

@@ -677,6 +677,142 @@ async def test_get_status_queue_still_carries_the_llm_override(_configured):
 
 
 @pytest.mark.asyncio
+@patch.object(
+    ModelService, "_get_llm_provider_and_model", return_value=("google", "gemini-3.8-flash")
+)
+async def test_get_status_connection_branch_reports_the_stored_override(_configured):
+    """A tracked connection reports the pinned model, not the global one.
+
+    Regression: this second return path built ``conn_model_info`` from the
+    profile alone, so a task tracked through ``active_connections`` showed the
+    global model even when the run had an override.
+    """
+    state.current_profile = "pro"
+    state.active_connections["sess-1"] = {
+        "goal": "Goal A",
+        "profile": "pro",
+        "pid": None,
+    }
+    with (
+        patch.object(TaskQueueService, "ensure_worker_running"),
+        patch("apps.admin_console.routers.tasks.session_repo") as repo,
+    ):
+        repo.get_latest_session.return_value = {"session_id": "sess-1"}
+        repo.get_session_by_id.return_value = {
+            "session_id": "sess-1",
+            "status": "running",
+            "device_info": json.dumps(
+                {"profile": "pro", "llm_model": "gpt-5.1", "llm_provider": "openai"}
+            ),
+        }
+        repo.get_background_tasks.return_value = []
+
+        result = await get_status()
+
+    assert result["session_id"] == "sess-1"
+    assert result["model_info"]["id"] == "gpt-5.1"
+    assert result["model_info"]["provider"] == "openai"
+    assert result["model_info"]["name"] == "Pro"
+    # Reused the row the main path already read, and stayed off the trace
+    # lookups entirely.
+    repo.get_session_by_id.assert_called_once_with("sess-1")
+    repo.get_llm_traces_for_profile.assert_not_called()
+    repo.get_agent_trace_names.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch.object(
+    ModelService, "_get_llm_provider_and_model", return_value=("google", "gemini-3.8-flash")
+)
+async def test_get_status_connection_branch_keeps_the_global_model_for_legacy_rows(_configured):
+    """A connection without stored override keys keeps reporting the config."""
+    state.current_profile = "pro"
+    state.active_connections["sess-1"] = {"goal": "Goal A", "profile": "pro", "pid": None}
+    with (
+        patch.object(TaskQueueService, "ensure_worker_running"),
+        patch("apps.admin_console.routers.tasks.session_repo") as repo,
+    ):
+        repo.get_latest_session.return_value = {"session_id": "sess-1"}
+        repo.get_session_by_id.return_value = {
+            "session_id": "sess-1",
+            "status": "running",
+            "device_info": json.dumps({"profile": "pro"}),
+        }
+        repo.get_background_tasks.return_value = []
+
+        result = await get_status()
+
+    assert result["model_info"]["id"] == "gemini-3.8-flash"
+    assert result["model_info"]["provider"] == "google"
+    assert result["model_info"]["name"] == "Pro"
+
+
+@pytest.mark.asyncio
+@patch.object(
+    ModelService, "_get_llm_provider_and_model", return_value=("google", "gemini-3.8-flash")
+)
+async def test_get_status_connection_branch_reads_the_connections_own_session(_configured):
+    """When another session owns the earlier row, this path reads its own.
+
+    ``running_sid`` can point at a different session than the connection being
+    reported, so the cached row must not be reused blindly.
+    """
+    other_owner = DeviceLockOwner(
+        pid=24681,
+        process_created_at=1234.5,
+        token="other-owner-token",
+        device_id="emulator-5554",
+        description="CLI task: other",
+        acquired_at="2026-08-24T00:00:00+00:00",
+        session_id="other-session",
+        ingress="cli",
+    )
+    state.current_profile = "pro"
+    state.active_connections["sess-1"] = {"goal": "Goal A", "profile": "pro", "pid": None}
+    with (
+        patch.object(TaskQueueService, "ensure_worker_running"),
+        # A lock owner for another device but no "active" owner: running_sid then
+        # resolves to that other session while this path reports the connection.
+        patch(
+            "apps.admin_console.routers.tasks.DeviceExecutionLock.get_active_owner",
+            return_value=None,
+        ),
+        patch(
+            "apps.admin_console.routers.tasks.DeviceExecutionLock.get_active_owners",
+            return_value={other_owner.device_id: other_owner},
+        ),
+        patch("apps.admin_console.routers.tasks.session_repo") as repo,
+    ):
+        repo.get_latest_session.return_value = {"session_id": "sess-1"}
+        repo.get_background_tasks.return_value = []
+        repo.get_session_by_id.side_effect = lambda sid: {
+            "other-session": {
+                "session_id": "other-session",
+                "device_info": json.dumps({"profile": "pro", "llm_model": "other-model"}),
+            },
+            "sess-1": {
+                "session_id": "sess-1",
+                "device_info": json.dumps(
+                    {"profile": "pro", "llm_model": "gpt-5.1", "llm_provider": "openai"}
+                ),
+            },
+        }[str(sid)]
+
+        result = await get_status()
+
+    assert result["session_id"] == "sess-1"
+    assert result["model_info"]["id"] == "gpt-5.1"
+    assert result["model_info"]["provider"] == "openai"
+    # The other session's row is not reused for this connection.
+    assert [call.args[0] for call in repo.get_session_by_id.call_args_list] == [
+        "other-session",
+        "sess-1",
+    ]
+    repo.get_llm_traces_for_profile.assert_not_called()
+    repo.get_agent_trace_names.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_cancel_task_triggers_next_pending_task():
     executed_goals = []
 
