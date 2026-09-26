@@ -208,7 +208,12 @@ class ArtemisClientTests(unittest.IsolatedAsyncioTestCase):
         self.transport.add(
             "GET",
             f"/api/sessions/{task_id}",
-            {"session_id": task_id, "status": "completed", "llm_model": "gpt-5.1"},
+            {
+                "session_id": task_id,
+                "status": "completed",
+                "llm_model": "gpt-5.1",
+                "llm_provider": "openai",
+            },
         )
         task = SimpleNamespace(
             goal="Audit checkout",
@@ -225,7 +230,10 @@ class ArtemisClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["profile"], "pro")
         self.assertEqual(body["llm_model"], "gpt-5.1")
         self.assertEqual(body["llm_provider"], "openai")
+        # Both halves of the override are echoed back by GET /api/sessions/{id},
+        # so the caller can see which model AND provider the host actually ran.
         self.assertEqual(result.llm_model, "gpt-5.1")
+        self.assertEqual(result.llm_provider, "openai")
 
     async def test_run_task_uses_task_llm_override_when_not_overridden(self) -> None:
         task_id = "00000000-0000-4000-8000-000000000362"

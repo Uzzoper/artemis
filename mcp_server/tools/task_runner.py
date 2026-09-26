@@ -27,7 +27,7 @@ from mcp_server.base import mcp
 from mcp_server.notifiers import notify
 from mcp_server.utils import env_utils
 from artemis.config import ExplorerVersion, checker_overrides_for_level
-from artemis.config.constants import LLMProvider
+from artemis.config.llm_override import normalize_llm_override
 from artemis.config.runtime import read_ipc_port
 from artemis.runtime import (
     DeviceExecutionLock,
@@ -173,11 +173,6 @@ def _validate_device_serial(device_serial: str) -> dict[str, Any] | None:
 
 _EXPLORER_MODES: tuple[str, ...] = get_args(ExplorerVersion)
 
-#: Providers accepted by the per-task LLM override (``llm_model`` /
-#: ``llm_provider``). Mirrors the API-side validation in
-#: ``admin_console.schemas.task_schema.RunRequest``.
-SUPPORTED_LLM_PROVIDERS: tuple[str, ...] = get_args(LLMProvider)
-
 
 def _normalize_pro_tuning(
     verification_level: str | None, explorer_mode: str | None
@@ -205,41 +200,6 @@ def _normalize_pro_tuning(
                 + ", ".join(_EXPLORER_MODES)
             )
     return level, mode
-
-
-def _normalize_llm_override(
-    llm_model: str | None, llm_provider: str | None
-) -> tuple[str | None, str | None]:
-    """Validate and normalise the per-task LLM override (strip + lower provider).
-
-    ``llm_model`` is a raw provider model identifier, so only surrounding
-    whitespace is removed; the provider is checked against the supported set so
-    an unusable override is rejected before any trace is created. A provider
-    without a model is rejected too: it pins nothing and would otherwise fail
-    mid-task on a broken endpoint.
-
-    Raises:
-        ValueError: with a caller-facing message when the provider is unknown, or
-            when a provider is given without a model.
-    """
-    model: str | None = None
-    if llm_model is not None and str(llm_model).strip():
-        model = str(llm_model).strip()
-
-    provider: str | None = None
-    if llm_provider is not None and str(llm_provider).strip():
-        provider = str(llm_provider).strip().lower()
-        if provider not in SUPPORTED_LLM_PROVIDERS:
-            raise ValueError(
-                f"Invalid llm_provider {llm_provider!r}. Must be one of: "
-                + ", ".join(SUPPORTED_LLM_PROVIDERS)
-            )
-    if provider and not model:
-        raise ValueError(
-            f"llm_provider={llm_provider!r} requires llm_model: pass llm_model too, "
-            "or drop llm_provider."
-        )
-    return model, provider
 
 
 @mcp.tool()
@@ -341,8 +301,9 @@ def mobile_run_task(
     # 0b. Validate the Pro tuning knobs before any trace exists so a typo is a
     # plain tool error rather than a failed trace on disk.
     verification_level, explorer_mode = _normalize_pro_tuning(verification_level, explorer_mode)
-    # 0c. Same fail-fast treatment for the per-task LLM override.
-    llm_model, llm_provider = _normalize_llm_override(llm_model, llm_provider)
+    # 0c. Same fail-fast treatment for the per-task LLM override, before any
+    # trace exists so an unusable override is a plain tool error.
+    llm_model, llm_provider = normalize_llm_override(llm_model, llm_provider)
 
     # 1. Generate a unique trace_id
     trace_id = str(uuid.uuid4())

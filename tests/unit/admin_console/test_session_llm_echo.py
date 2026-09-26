@@ -73,6 +73,11 @@ def test_get_session_details_echoes_the_recorded_override(_configured, tmp_path,
 
     assert payload["llm_model"] == "gpt-5.1"
     assert payload["llm_provider"] == "openai"
+    # Both halves sit at the top level of the payload: that is the contract
+    # artemis-client's TaskResult.from_payload reads, so the echo resolves for a
+    # remote caller and not only against a mocked transport.
+    assert isinstance(payload["llm_model"], str)
+    assert isinstance(payload["llm_provider"], str)
     # Parity with the list endpoint: model_info reflects the same override.
     assert payload["model_info"]["id"] == "gpt-5.1"
     assert payload["model_info"]["provider"] == "openai"

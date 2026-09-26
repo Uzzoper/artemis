@@ -41,6 +41,7 @@ try:
 except Exception:
     load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
+from artemis.config.llm_override import normalize_llm_override
 from artemis.runtime import trace_store
 from mcp_server.notifiers import notify
 from mcp_server.utils import device_utils
@@ -265,10 +266,7 @@ async def run_task(
             task_builder.with_output_description(description=expected_output_desc)
         if model.lower() == "flash":
             task_builder.using_profile("flash")
-        llm_model = llm_model.strip() or None if isinstance(llm_model, str) else llm_model
-        llm_provider = (
-            llm_provider.strip().lower() or None if isinstance(llm_provider, str) else llm_provider
-        )
+        llm_model, llm_provider = normalize_llm_override(llm_model, llm_provider)
         if llm_model or llm_provider:
             task_builder.with_llm_override(model=llm_model, provider=llm_provider)
 

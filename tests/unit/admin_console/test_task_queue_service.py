@@ -1042,6 +1042,33 @@ async def test_enqueue_tasks_normalises_llm_override_and_omits_when_blank():
 
 
 @pytest.mark.asyncio
+async def test_enqueue_tasks_rejects_an_unusable_llm_override():
+    """The queue runs the shared validator, so a bad override never gets a slot.
+
+    The API schema already refuses these, but the queue is also reachable from
+    the daemon and MCP, so it must not persist a task that cannot run.
+    """
+    with (
+        patch.object(TaskQueueService, "ensure_worker_running") as worker,
+        patch(
+            "apps.admin_console.services.task_queue_service.DeviceExecutionLock.reserve",
+            return_value="mock-ticket-llm",
+        ),
+    ):
+        with pytest.raises(ValueError, match="unknown llm_provider"):
+            await task_queue_service.enqueue_tasks(
+                ["Goal"], profile="pro", llm_model="gpt-5.1", llm_provider="acme-cloud"
+            )
+        with pytest.raises(ValueError, match="llm_provider requires llm_model"):
+            await task_queue_service.enqueue_tasks(
+                ["Goal"], profile="pro", llm_model="   ", llm_provider="openai"
+            )
+
+    assert worker.call_count == 0
+    assert state.queue_items == []
+
+
+@pytest.mark.asyncio
 async def test_queue_worker_notifies_conversation():
     """Verify queue_worker calls notify() when conversation_id is attached to task."""
     executed_cmds = []

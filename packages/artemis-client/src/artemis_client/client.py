@@ -52,6 +52,23 @@ def _normalize_choice(value: str | None, name: str, choices: tuple[str, ...]) ->
     return normalized
 
 
+def _normalize_llm_override(
+    llm_model: str | None, llm_provider: str | None
+) -> tuple[str | None, str | None]:
+    """Normalise the per-task ``(model, provider)`` override before submitting.
+
+    Blank means "not requested" rather than an override with ``""``, and the
+    provider is lower-cased to the API's spelling. The model identifier stays
+    case-sensitive, so only whitespace is trimmed. Unsupported providers are
+    *not* rejected here: the host validates them and answers 4xx, which keeps
+    this package dependency-free and forwards the server's own message.
+
+    Mirrors ``artemis.config.llm_override.normalize_llm_override``, which cannot
+    be imported because this package must stay runtime-dependency-free.
+    """
+    return (llm_model or "").strip() or None, (llm_provider or "").strip().lower() or None
+
+
 class ArtemisClient:
     """Thin client for an Artemis daemon running on another host.
 
@@ -220,11 +237,7 @@ class ArtemisClient:
                 raise ValueError("task_id must be a valid UUID string") from exc
         resolved_profile = profile or self.default_profile
         resolved_device = device_serial or self.device_serial
-        # Per-task override: a blank value means "not requested" rather than an
-        # override with "", and the provider is normalised to the API's
-        # lower-case spelling.
-        resolved_model = (llm_model or "").strip() or None
-        resolved_provider = (llm_provider or "").strip().lower() or None
+        resolved_model, resolved_provider = _normalize_llm_override(llm_model, llm_provider)
         payload: dict[str, Any] = {
             "goal": normalized_goal,
             "profile": resolved_profile,

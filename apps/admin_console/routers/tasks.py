@@ -203,6 +203,16 @@ async def get_run_defaults():
     }
 
 
+@router.get("/api/llm-options")
+async def get_llm_options():
+    """Provider allowlist, ``artemis.jsonc`` presets and the configured default.
+
+    The model picker builds its dropdowns from this instead of hard-coding a
+    provider list, so a new provider or preset shows up without a UI change.
+    """
+    return model_service.get_llm_options()
+
+
 @router.get("/api/devices")
 async def list_devices():
     """List all connected Android devices with their busy / idle status."""

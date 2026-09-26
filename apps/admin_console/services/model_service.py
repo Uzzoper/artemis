@@ -15,7 +15,7 @@
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, get_args
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,46 @@ class ModelService:
             "id": model_id,
             "provider": provider,
             "architecture": f"ARTEMIS {arch_name}",
+        }
+
+    @classmethod
+    def get_llm_options(cls) -> dict[str, Any]:
+        """Providers, the raw ``artemis.jsonc`` presets, and the configured default.
+
+        Feeds the Console model picker: the provider allowlist is the same
+        ``LLMProvider`` literal the override validates against, and the presets
+        are read straight from the config so the choices stay in sync with
+        ``artemis.jsonc`` instead of being duplicated in the UI. An unreadable
+        config yields no presets rather than an error, matching how the rest of
+        the display paths degrade.
+        """
+        from artemis.config.constants import ARTEMIS_CONFIG_FILENAME, LLMProvider
+        from artemis.config.paths import get_config_path
+        from artemis.utils.file import load_jsonc
+
+        provider, model = cls._get_llm_provider_and_model()
+        presets: list[dict[str, str]] = []
+        try:
+            with open(get_config_path(ARTEMIS_CONFIG_FILENAME), encoding="utf-8") as f:
+                raw = load_jsonc(f)
+        except Exception as exc:
+            logger.warning("Could not read LLM presets for display: %s", exc)
+            raw = None
+        block = raw.get("presets") if isinstance(raw, dict) else None
+        if isinstance(block, dict):
+            for name, preset in block.items():
+                if isinstance(preset, dict):
+                    presets.append(
+                        {
+                            "name": str(name),
+                            "provider": str(preset.get("provider") or ""),
+                            "model": str(preset.get("model") or ""),
+                        }
+                    )
+        return {
+            "providers": list(get_args(LLMProvider)),
+            "presets": presets,
+            "default": {"provider": provider, "model": model},
         }
 
     @staticmethod

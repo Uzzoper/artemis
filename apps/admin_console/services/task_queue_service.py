@@ -41,6 +41,7 @@ from artemis.config import (
     TEST_OUTPUTS_DIR,
     WORKSPACE_ROOT,
 )
+from artemis.config.llm_override import normalize_llm_override
 from artemis.runtime import (
     AdbEndpoint,
     AdbTarget,
@@ -1081,9 +1082,9 @@ class TaskQueueService:
         )
         explorer_mode = str(explorer_mode).strip().lower() or None if explorer_mode else None
         # Model identifiers are case-sensitive, so only whitespace is trimmed;
-        # provider names are normalised to lower case like the other knobs.
-        llm_model = str(llm_model).strip() or None if llm_model else None
-        llm_provider = str(llm_provider).strip().lower() or None if llm_provider else None
+        # provider names are normalised to lower case and validated, so an
+        # unusable override is rejected before the worker is woken.
+        llm_model, llm_provider = normalize_llm_override(llm_model, llm_provider)
         cls.ensure_worker_running()
 
         enqueued_tasks = []

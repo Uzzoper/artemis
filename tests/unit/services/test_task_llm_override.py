@@ -148,19 +148,19 @@ def test_override_does_not_mutate_the_shared_llm_config():
 
 def test_builder_rejects_provider_without_model():
     """A provider alone pins nothing, so it is refused at build time."""
-    with pytest.raises(ValueError, match="provider requires model"):
+    with pytest.raises(ValueError, match="llm_provider requires llm_model"):
         TaskRequestBuilder(goal="Audit checkout").with_llm_override(provider="openai")
 
 
 def test_builder_rejects_blank_model_with_provider():
     builder = TaskRequestBuilder(goal="Audit checkout")
 
-    with pytest.raises(ValueError, match="provider requires model"):
+    with pytest.raises(ValueError, match="llm_provider requires llm_model"):
         builder.with_llm_override(model="   ", provider="openai")
 
 
 def test_builder_rejects_unknown_provider():
-    with pytest.raises(ValueError, match="unknown provider"):
+    with pytest.raises(ValueError, match="unknown llm_provider"):
         TaskRequestBuilder(goal="Audit checkout").with_llm_override(
             model="gpt-5.1", provider="NotAProvider"
         )

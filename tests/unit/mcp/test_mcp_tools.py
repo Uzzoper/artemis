@@ -320,7 +320,7 @@ def test_mobile_run_task_omits_llm_override_flags_when_unset(temp_trace_env):
 
 
 def test_mobile_run_task_rejects_unknown_llm_provider_before_creating_a_trace(temp_trace_env):
-    with pytest.raises(ValueError, match="Invalid llm_provider"):
+    with pytest.raises(ValueError, match="unknown llm_provider"):
         mobile_run_task(task_desc="Open Settings", model="Pro", llm_provider="acme-cloud")
     # Rejected before init_trace: nothing was written to the trace store.
     assert os.listdir(temp_trace_env) == []
