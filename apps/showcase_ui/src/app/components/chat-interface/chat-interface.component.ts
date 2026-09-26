@@ -218,16 +218,20 @@ export class ChatInterfaceComponent {
   }
 
   /**
-   * Per-task LLM override carried by the queue item, e.g. "openai · gpt-5-mini".
-   * Null when the task runs on the configured default model.
+   * Model shown on a task card: the per-task override recorded on the queue item
+   * when there is one, otherwise the model persisted with the session, in the
+   * "provider · model" form. Null when neither is known.
    */
   public getTaskModelLabel(session: Session): string | null {
-    const model = (session.llm_model || '').trim();
-    const provider = (session.llm_provider || '').trim();
-    if (!model) {
-      return provider || null;
+    const model = (session.llm_model || '').trim() || (session.model_info?.id || '').trim();
+    const provider = (session.llm_provider || '').trim() || (session.model_info?.provider || '').trim();
+    if (!model && !provider) {
+      return null;
     }
-    return provider ? `${provider} · ${model}` : model;
+    if (model && provider) {
+      return `${provider} · ${model}`;
+    }
+    return model || provider;
   }
 
   /**
