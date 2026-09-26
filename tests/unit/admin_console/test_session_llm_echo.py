@@ -134,3 +134,51 @@ async def test_list_sessions_model_info_prefers_the_recorded_override(_configure
     assert rows["session-override"]["model_info"]["provider"] == "openai"
     assert rows["session-legacy"]["model_info"]["id"] == "gemini-3.8-flash"
     assert rows["session-legacy"]["model_info"]["provider"] == "google"
+
+
+@pytest.mark.asyncio
+@patch.object(ModelService, "_get_llm_provider_and_model", return_value=_CONFIGURED)
+async def test_list_sessions_reports_the_override_for_a_profile_less_row(_configured, monkeypatch):
+    """No resolvable profile must not hide a stored override.
+
+    Regression: the row used to fall back to the global ``default_model_info``
+    whenever the profile stayed unresolved, dropping the pinned model.
+    """
+    repo = MagicMock()
+    repo.get_all_sessions.return_value = [
+        {
+            "session_id": "session-profileless-override",
+            "status": "completed",
+            "start_time": 1.0,
+            "device_info": json.dumps({"llm_model": "gpt-5.1", "llm_provider": "openai"}),
+        },
+        {
+            "session_id": "session-profileless-legacy",
+            "status": "completed",
+            "start_time": 2.0,
+            "device_info": None,
+        },
+    ]
+    repo.get_video_recordings_map.return_value = {}
+    repo.get_latest_video_recordings_map.return_value = {}
+    repo.get_agent_trace_names_map.return_value = {}
+    repo.get_llm_traces_for_profiles_map.return_value = {}
+
+    monkeypatch.setattr(sessions_router, "session_repo", repo, raising=False)
+    monkeypatch.setattr(
+        sessions_router.media_service, "build_video_index", MagicMock(return_value={})
+    )
+    monkeypatch.setattr(
+        sessions_router.media_service, "resolve_video_url", MagicMock(return_value=None)
+    )
+
+    rows = {row["session_id"]: row for row in await sessions_router.list_sessions()}
+
+    override = rows["session-profileless-override"]["model_info"]
+    assert (override["id"], override["provider"]) == ("gpt-5.1", "openai")
+    # The architecture stays Flash until the trace-name pass settles the profile.
+    assert override["name"] == "Flash"
+    # No keys at all: the untouched global default, built once per request.
+    legacy = rows["session-profileless-legacy"]["model_info"]
+    assert (legacy["id"], legacy["provider"]) == ("gemini-3.8-flash", "google")
+    assert legacy == sessions_router.model_service.get_active_model_info()

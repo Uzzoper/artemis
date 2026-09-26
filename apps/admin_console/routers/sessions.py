@@ -120,9 +120,13 @@ def _list_sessions_sync():
             row_dict, None, state.current_profile, agent_names=agent_names
         )
         llm_model, llm_provider = model_service.resolve_session_llm_override(row_dict)
+        # A stored override is reported even when the profile stays unresolved
+        # (the architecture stays Flash until the trace-name pass below settles
+        # it), because the pinned model is a fact about the run. Legacy rows
+        # without the keys keep the global default.
         row_dict["model_info"] = (
             model_service.get_active_model_info(sess_profile, llm_model, llm_provider)
-            if sess_profile
+            if sess_profile or llm_model or llm_provider
             else default_model_info
         )
         if not sess_profile:
